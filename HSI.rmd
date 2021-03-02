@@ -1,0 +1,279 @@
+---
+title: "Predict Hang Seng Index by ARMA+GARCH Model"
+author: "MA-Haoran"
+date: "2021/03/02"
+output: 
+  html_document: 
+    toc: yes
+    theme: paper
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,warning = FALSE)
+```
+
+## A Thank-You Letter
+
+**Dear Admission Officer,**
+
+**Thanks for your time.**
+
+**This report is a small experiment of a time series analysis. I learned such mathematical theory and programming all by myself without external guide, and the document is just a personal note rather than a formal paper, so please be patient if any mistake happened. Besides, my original purpose is to apply the ARIMA+GARCH model in practice *("for fun")* rather than build a high performance financial model, thus little financial strategy is applied here. **
+
+**I was a certified public accountant and had real exposure to business as a professional in Ernst & Young. But here I am just willing to show my attempt and convey my passion, efforts, dedication and determination for the program.**
+
+**I hope to see you in the near future.**
+
+
+**Regards,**
+
+**MA Haoran**
+
+
+## Introduction
+The purpose is to build a time series model and predict the Hang Seng Index (HSI). 
+Firstly, get the HSI index and build the training data. Then, explore the data and capture the features for a model. Find the ARIMA model with the least AIC and fit the residuals by GARCH model. Finally, make a 10 days forecast, compare the outcome with testing data.
+
+
+
+## Process Data
+
+```{r,message=FALSE,warning=FALSE}
+library(tidyquant)
+library(fpp3)
+library(rugarch)
+library(data.table)
+library(plotly)
+setwd("C:/Users/Apple/Desktop/RStudio Tour/note/TSA")
+```
+
+
+
+The historical data is downloaded from 
+[Yahoo Finance](https://finance.yahoo.com/quote/%5EHSI/history?p=%5EHSI)
+The training data covered from 2010-01-05 to 2021-01-29.
+```{r}
+HSI <- fread("^HSI.csv")
+HSI <- HSI[, .(Date, Close = as.numeric(Close))]
+HSI <- HSI %>% 
+    tsibble(index = Date) %>%
+    mutate(Return = difference(log(HSI$Close)) * 100)
+
+HSI <- HSI %>%
+    na.omit()%>%
+    mutate(time = row_number()) %>%
+    update_tsibble(index = time)
+head(HSI)
+```
+
+### Plot the Close Price
+```{r}
+HSI %>%
+    ggplot(aes(x = Date, y = Close)) +
+    geom_line() +
+    theme_tq() +
+    labs(title = "HSI Index (date data)")
+
+```
+
+According to the plot, the Close Price is not stationary. In order to fit an ARIMA model, it is necessary to difference the logarithm of the initial price.
+
+### Plot the return
+Return = (ln(Close Price (t+1)) - ln(Close Price(t))) *100
+```{r}
+HSI %>%
+    ggplot(aes(x = Date, y =Return )) +
+    geom_line() +
+    theme_tq() +
+    labs(title = "HSI Return (date data)")
+
+
+```
+
+The Return seems stationary.
+
+
+One way to determine more objectively whether differencing is required is to use a unit root test. These are statistical hypothesis tests of stationarity that are designed for determining whether differencing is required.
+
+### Unit Root Test:
+
+H0:the data is stationary
+```{r}
+HSI%>%features(Return,unitroot_kpss)
+
+```
+
+P-Value = 0.1 > 0.05, so the null hypothesis is accepted.
+
+
+## Model:ARIMA+GARCH
+### ARIMA part
+
+#### Find the ARIMA model with the least AIC.
+
+```{r}
+arima.mod <- HSI %>%
+    model(ARIMA(Return, stepwise = FALSE, approximation = FALSE))
+
+arima.mod
+```
+
+
+#### ARIMA residual analysis:
+```{r}
+arima.mod%>%
+    gg_tsresiduals()
+
+
+```
+
+
+#### Ljung-box Test
+
+H0: Data cannot be distinguished from white noise.
+
+```{r}
+augment(arima.mod)%>%features(.innov,ljung_box)
+```
+
+According to the plot and ljung-box test, pvalue>0.05, so the residuals of the model cannot be distinguished from white noise. 
+It is rational to accept **ARIMA(2,0,3)**.
+
+
+
+#### Detect the ARCH effect on residuals:
+There would be an ARCH effect if the acf and pacf of residuals^2 are significant.
+```{r}
+p1<-arima.mod%>%
+    augment()%>%
+    select(.innov)%>%
+    ACF(.innov^2)%>%
+    autoplot()+
+    labs(y="resid^2  acf")
+
+p2<-arima.mod%>%
+    augment()%>%
+    select(.innov)%>%
+    PACF(.innov^2)%>%
+    autoplot()+
+    labs(y="resid^2  pacf")
+
+gridExtra::grid.arrange(p1,p2)
+
+
+```
+Thus the ARCH effect on residuals is significant, it plausible to fit a GARCH model on residuals.
+
+
+### GARCH part
+Try model: ARIMA(2,0,3)+GARCH(1,1)
+```{r}
+spec <-
+    ugarchspec(
+        variance.model = list(
+            model = "sGARCH",
+            garchOrder = c(1, 1),
+            submodel = NULL,
+            external.regressors = NULL,
+            variance.targeting = FALSE
+        ),
+        mean.model = list(armaOrder = c(2, 3),
+                          include.mean = TRUE),
+        distribution.model = "sged"
+    )
+
+
+fit <- ugarchfit(spec, HSI$Return,
+                 solver = "hybrid")
+```
+
+Report the final model 
+```{r}
+print(fit)
+```
+
+## Forecast
+Build a forecast function to predict return in 10 days.
+```{r}
+fore<- function(input, p, q, n) {
+        spec <-
+            ugarchspec(
+                variance.model = list(
+                    model = "sGARCH",
+                    garchOrder = c(1, 1),
+                    submodel = NULL,
+                    external.regressors = NULL,
+                    variance.targeting = FALSE
+                ),
+                mean.model = list(armaOrder = c(p, q),
+                                  include.mean = TRUE),
+                distribution.model = "sged"
+            )
+        fit <- ugarchfit(spec, input$Return,
+                         solver = "hybrid")
+        fore<-ugarchforecast(fit,n.ahead = n)
+        pred<-fore@forecast$seriesFor
+        pred<-as.data.table(pred)
+        setnames(pred,"Return")
+        pred[,time:=seq.int(from = 1,to=n,by=1)][]
+       
+}
+
+
+pred<-fore(HSI,2,3,10)
+
+#View the predictions
+pred
+
+
+
+
+```
+
+Examine the predictions with testing set. The raw test data starts from 2021-01-29, the last day of the traing set.
+```{r}
+ test <- fread("test.csv")
+    test <- test[, .(Date, Close = as.numeric(Close))]
+    test <- test %>% 
+        tsibble(index = Date) %>%
+        mutate(Return = difference(log(test$Close)) * 100)
+    
+    test <- test %>%
+        na.omit()%>%
+        mutate(time = row_number()) %>%
+        update_tsibble(index = time)
+
+# Preview the test data
+head(test,5)
+
+
+```
+
+Plot forecast value and test value.
+```{r}
+
+foretest <- function(pred, test) {
+   p<- pred %>%
+        tsibble(index = time) %>%
+        left_join(test, by = "time") %>%
+        mutate(Pred = Return.x,
+               Actual = Return.y) %>%
+        select(time, Date, Close, Pred, Actual) %>%
+        pivot_longer(cols = c(Pred, Actual), values_to = "Return",
+                     names_to="Type") %>%
+        ggplot(aes(x = Date, y = Return, color = Type)) +
+        geom_line() +
+        scale_x_date(date_minor_breaks = "1 day")+
+        theme_tq()
+   ggplotly(p)
+}
+
+foretest(pred,test)
+
+```
+Discrepancy could easily be observed, the actual line seems 1 lag behind the prediction line, but the locations of inflection points are pretty close. (Perhaps this is caused by effective market... anyway, effective market maybe a good news for society. Just kidding!)
+
+Of course the model has to be improved. Cross-validation would be useful, and it might be fun to use bootstrap and function hilo() to draw the prediction interval.
+
+*To assure the reproducibility, all code and data have been uploaded to [Github](https://github.com/ma-haoran/Predict-HSI-by-ARIMA-GARCH)*
