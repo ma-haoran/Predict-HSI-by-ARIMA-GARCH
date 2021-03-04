@@ -7,7 +7,7 @@ The training data covered from 2010-01-05 to 2021-01-29.
 
 Test data starts from 2021-01-29.
 
-View report on [Rpub](https://rpubs.com/ma-haoran/732973)
+**View report on [Rpub](https://rpubs.com/ma-haoran/732973)**
 
 My e-mail: mahaoran097a@163.com 
 
