@@ -299,5 +299,6 @@ Discrepancy could easily be observed, the actual line seems 1 lag behind the pre
 
 Of course the model has to be improved. Cross-validation would be useful, and it might be fun to use bootstrap and function hilo() to draw the prediction interval.
 
+
 *To assure the reproducibility, all code and data have been uploaded to [Github](https://github.com/ma-haoran/Predict-HSI-by-ARIMA-GARCH)*(*[ctrl+click] to attach link*)
 
