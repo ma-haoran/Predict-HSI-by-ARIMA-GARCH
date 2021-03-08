@@ -47,7 +47,7 @@ library(tseries)
 library(rugarch)
 library(data.table)
 library(plotly)
-setwd("C:/Users/Apple/Desktop/RStudio Tour/note/TSA/Predict-HSI-by-ARIMA-GARCH")
+setwd("C:/Users/Apple/Desktop/RStudio Tour/note/TSA")
 ```
 
 
@@ -309,13 +309,15 @@ Of course the model has to be improved. Cross-validation would be useful. It mig
 
 ## Cross Validation
 
-From year 2020 to 2021, splice every 100 trading days and train data and make a one day forecast.
+From year 2020 to 2021, splice every 100 trading days as train data and make a one day forecast.
 
 For instance,
 
 train Day1~Day100, forecast Day101;
+
 train Day2~Day101, forecast Day102;
-train Day3~Day103, forecast Day103,etc.
+
+train Day3~Day102, forecast Day103,etc.
 
 
 #### Get the ARMA p,q with the least AIC for "year > 2020"
@@ -427,4 +429,3 @@ The trend of the prediction curve is informative. Also, it is harmless to determ
 
 
 *To assure the reproducibility, all code and data have been uploaded to [Github](https://github.com/ma-haoran/Predict-HSI-by-ARIMA-GARCH)*(*[ctrl+click] to attach link*)
-
