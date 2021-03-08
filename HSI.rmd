@@ -21,9 +21,9 @@ knitr::opts_chunk$set(echo = TRUE,warning = FALSE)
 
 **This report is a brief application of a time series analysis. I learned such mathematical theory and programming all by myself without external guide, and the document is just a personal note rather than a formal paper, so please be patient if any mistake happened. Besides, my original purpose is to apply the ARIMA+GARCH model in practice *("for fun")* rather than to build a high performance investment model, thus little financial strategy is applied here. **
 
-**In fact, I was a full-time professional in *Ernst & Young*, one of the big4 firms, as a certified public accountant. Perhaps accounting and corporate finance is the area of my expertise. Nonetheless, I expect more from myself as I decide to expand my intellectual horizon to build an inspired mind. So here I am just willing to show my attempt and convey my passion, efforts, dedication and determination for your program.**
+**In fact, I was a full-time professional in *Ernst & Young*, one of the big4 firms, as a certified public accountant. Perhaps accounting and corporate finance is the area of my expertise. Nonetheless, I expect more from myself as I decide to expand my intellectual horizon to build an inspired mind. So here I am just willing to show my self-taught knowledge to convey my efforts, aspiration,  dedication and determination for your program.**
 
-**I hope to see you in the near future.**
+**It would be my honor to make every effort to realize academic value through your excellent program. Sincerely hope to see you in the near future.**
 
 
 **Best regards,**
@@ -47,7 +47,7 @@ library(tseries)
 library(rugarch)
 library(data.table)
 library(plotly)
-setwd("C:/Users/Apple/Desktop/RStudio Tour/note/TSA")
+setwd("C:/Users/Apple/Desktop/RStudio Tour/note/TSA/Predict-HSI-by-ARIMA-GARCH")
 ```
 
 
@@ -288,16 +288,143 @@ foretest <- function(pred, test) {
     ggplot(aes(x = Date, y = Return, color = Type)) +
     geom_line() +
     scale_x_date(date_minor_breaks = "1 day") +
-    theme_tq()
+    ggsci::scale_color_aaas()+
+    labs(title = "10 Trading Days Forecast")
   ggplotly(p)
 }
 
 foretest(pred, test)
 
 ```
-Discrepancy could easily be observed, the actual line seems 1 lag behind the prediction line, but the locations of inflection points are pretty close. (Perhaps this is caused by effective market... anyway, effective market maybe a good news for society. Just kidding!)
 
-Of course the model has to be improved. Cross-validation would be useful, and it might be fun to use bootstrap and function hilo() to draw the prediction interval.
+Discrepancy could easily be observed, the actual curve seems 1 lag behind the prediction curve. However, the model is still capable of capturing some trend since the locations of inflection points are pretty close. Also, as the forecast period grows, the prediction curve gradually smooths.
+
+(Perhaps the deviation is caused by efficient market, which maybe a good news for society. Just kidding!)
+
+Of course the model has to be improved. Cross-validation would be useful. It might be fun to use bootstrap and function hilo() to draw the prediction interval.
+
+
+
+
+
+## Cross Validation
+
+From year 2020 to 2021, splice every 100 trading days and train data and make a one day forecast.
+
+For instance,
+
+train Day1~Day100, forecast Day101;
+train Day2~Day101, forecast Day102;
+train Day3~Day103, forecast Day103,etc.
+
+
+#### Get the ARMA p,q with the least AIC for "year > 2020"
+```{r,cache=TRUE}
+CrossValidation <- HSI %>%
+  filter(year(Date) >= 2020)
+
+buildARIMA <- function(input) {
+    arima.mod <- input %>%
+        model(ARIMA(Return, stepwise = FALSE, approximation = FALSE))
+    
+    list(
+        model = arima.mod,
+        ljung_box = augment(arima.mod) %>% features(.innov, ljung_box)
+    )
+}
+
+buildARIMA(CrossValidation)
+
+
+
+```
+
+
+According to the result, ARMA(3,1) is acceptable.
+
+#### Cross Validation Test
+ARIMA(3,0,1)+GARCH(1,1)
+```{r}
+CrossValidation <- CrossValidation %>%
+  tsibble(index = time) %>%
+  stretch_tsibble(.step = 1, .init = 100, .id = ".id") %>%
+  group_by_key() %>%
+  slice(n() - 99:0)
+ spec <-
+            ugarchspec(
+                variance.model = list(
+                    model = "sGARCH",
+                    garchOrder = c(1, 1),
+                    submodel = NULL,
+                    external.regressors = NULL,
+                    variance.targeting = FALSE
+                ),
+                mean.model = list(armaOrder = c(3, 1),
+                                  include.mean = TRUE),
+                distribution.model = "sged"
+            )
+
+ 
+ 
+ 
+ Crossforecast <- function(data) {
+   CrossFore <- vector()
+   for (i in 1:tail(data$.id)[1]) {
+     train <- data %>%
+       filter(.id == i)
+     
+     fit <- ugarchfit(spec, train$Return,
+                      solver = "hybrid")
+     
+     CrossFore[i] <-
+       ugarchforecast(fit, n.ahead = 1)@forecast$seriesFor[1]
+     
+   }
+   CrossFore
+ }
+
+ CrossPred<-Crossforecast(CrossValidation)
+ 
+ tsCV<-HSI %>%
+    filter(year(Date) >= 2020)%>%
+    mutate(time=row_number())%>%
+    filter(time>100)%>%
+   mutate(Pred=CrossPred[1:(length(CrossPred)-1)])
+ head(tsCV)
+```
+
+#### Plot the result
+```{r}
+tsCV %>%
+  pivot_longer(
+    cols = c(Pred, Return),
+    values_to = "Return",
+    names_to = "Type"
+  ) %>%
+  ggplot(aes(x = Date, y = Return, color = Type)) +
+  geom_line() +
+  scale_x_date(date_minor_breaks = "1 day") +
+  theme_tq() +
+  labs(title = "Cross Validation Test")
+  
+
+
+
+
+```
+
+
+Weakness:
+
+The fluctuation of the forecast curve is significantly weaker than the actual curve.
+
+
+Advantage:
+
+The trend of the prediction curve is informative. Also, it is harmless to determine whether return is positive or negative by forecast value after June 2020.
+
+
+
 
 *To assure the reproducibility, all code and data have been uploaded to [Github](https://github.com/ma-haoran/Predict-HSI-by-ARIMA-GARCH)*(*[ctrl+click] to attach link*)
 
