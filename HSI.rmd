@@ -426,6 +426,100 @@ Advantage:
 The trend of the prediction curve is informative. Also, it is harmless to determine whether return is positive or negative by forecast value after June 2020.
 
 
+## A More Practical Application
+The model above may catch some trend on HSI, however, not accuracy enough for practical use. The bright point is that for some specific stock, the model may fit better.
+
+Below is a better fitted ARIMA+GARCH model on China Shenhua Energy Company Limited (601088.SS). 
+
+To keep brief, code has been hided in this part since it is similar as the code presented above. All code for this report could be view on my [Github](https://github.com/ma-haoran/Predict-HSI-by-ARIMA-GARCH)(*[ctrl+click] to attach link*)
+
+```{r,echo=FALSE}
+# Downloaded data from Yahoo Finance, symbol 601088.SS,
+# from 2020/03/10 to 2021/03/10
+
+tidydata<-function(input){
+    data <- fread(input)
+    data <- data[, .(Date, Close = as.numeric(Close))]
+    data <- data %>% 
+        tsibble(index = Date) %>%
+        mutate(Return = difference(log(data$Close)) * 100)
+    
+    data <- data %>%
+        na.omit()%>%
+        mutate(time = row_number()) %>%
+        update_tsibble(index = time)
+    
+    data
+}
 
 
-*To assure the reproducibility, all code and data have been uploaded to [Github](https://github.com/ma-haoran/Predict-HSI-by-ARIMA-GARCH)*(*[ctrl+click] to attach link*)
+
+train<-tidydata("601088.SS.csv")
+
+CrossValidation <- train %>%
+    tsibble(index = time) %>%
+    stretch_tsibble(.step = 1, .init = 60, .id = ".id") %>%
+    group_by_key() %>%
+    slice(n() - 59:0)
+spec <-
+    ugarchspec(
+        variance.model = list(
+            model = "sGARCH",
+            garchOrder = c(1, 1),
+            submodel = NULL,
+            external.regressors = NULL,
+            variance.targeting = FALSE
+        ),
+        mean.model = list(armaOrder = c(2, 2),
+                          include.mean = TRUE),
+        distribution.model = "sged"
+    )
+
+
+
+
+Crossforecast <- function(data) {
+    CrossFore <- vector()
+    for (i in 1:tail(data$.id)[1]) {
+        train <- data %>%
+            filter(.id == i)
+        
+        fit <- ugarchfit(spec, train$Return,
+                         solver = "hybrid")
+        
+        CrossFore[i] <-
+            ugarchforecast(fit, n.ahead = 1)@forecast$seriesFor[1]
+        
+    }
+    CrossFore
+}
+
+CrossPred<-Crossforecast(CrossValidation)
+
+tsCV<-train %>%
+    mutate(time=row_number())%>%
+    filter(time>60)%>%
+    mutate(Pred=CrossPred[1:(length(CrossPred)-1)])
+
+tsCV %>%
+    pivot_longer(
+        cols = c(Pred, Return),
+        values_to = "Return",
+        names_to = "Type"
+    ) %>%
+    ggplot(aes(x = Date, y = Return, color = Type)) +
+    geom_line() +
+    theme_tq() +
+    labs(title = "Cross Validation Test")+
+    coord_cartesian(ylim = c(-3,3))
+
+
+
+
+
+```
+
+
+
+
+*To assure reproducibility, all code and data have been uploaded to [Github](https://github.com/ma-haoran/Predict-HSI-by-ARIMA-GARCH)*(*[ctrl+click] to attach link*)
