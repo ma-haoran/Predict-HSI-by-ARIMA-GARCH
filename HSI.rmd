@@ -13,22 +13,6 @@ output:
 knitr::opts_chunk$set(echo = TRUE,warning = FALSE)
 ```
 
-## A Thank-You Letter
-
-**Dear Admission Officer,**
-
-**Appreciate for your time.**
-
-**This report is a brief application of a time series analysis. I learned such mathematical theory and programming all by myself without external guide, and the document is just a personal note rather than a formal paper, so please be patient if any mistake happened. Besides, my original purpose is to apply the ARIMA+GARCH model in practice *("for fun")* rather than to build a high performance investment model, thus little financial strategy is applied here. **
-
-**In fact, I was a full-time professional in *Ernst & Young*, one of the big4 firms, as a certified public accountant. Perhaps accounting and corporate finance is the area of my expertise. Nonetheless, I expect more from myself as I decide to expand my intellectual horizon to build an inspired mind. So here I am just willing to show my self-taught knowledge to convey my efforts, aspiration,  dedication and determination for your program.**
-
-**It would be my honor to make every effort to realize academic value through your excellent program. Sincerely hope to see you in the near future.**
-
-
-**Best regards,**
-
-**MA Haoran**
 
 
 ## Introduction
@@ -433,7 +417,7 @@ Below is a better fitted ARIMA+GARCH model on China Shenhua Energy Company Limit
 
 To keep brief, code has been hided in this part since it is similar as the code presented above. All code for this report could be view on my [Github](https://github.com/ma-haoran/Predict-HSI-by-ARIMA-GARCH)(*[ctrl+click] to attach link*)
 
-```{r,echo=FALSE}
+```{r,echo=FALSE,cache=TRUE}
 # Downloaded data from Yahoo Finance, symbol 601088.SS,
 # from 2020/03/10 to 2021/03/10
 
