@@ -11,5 +11,5 @@ Test data starts from 2021-01-29.
 
 **View report on [Rpub](https://rpubs.com/ma-haoran/732973)**
 
-My e-mail: mahaoran097a@126.com 
+My e-mail: mhrdyx@126.com 
 
